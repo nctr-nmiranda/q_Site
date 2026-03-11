@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String?
+  password     String?
+  image        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  documents    Document[]
+  quizSessions QuizSession[]
+  quizResults  QuizResult[]
+}
+
+model Document {
+  id              String     @id @default(cuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id])
+  title           String
+  filename        String
+  filePath        String
+  fileType        String
+  fileSize        Int
+  rawText         String
+  status          String     @default("pending")
+  totalQuestions  Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  questions       Question[]
+  quizSessions    QuizSession[]
+}
+
+model Question {
+  id             String       @id @default(cuid())
+  documentId     String
+  document       Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  questionNumber Int
+  questionText   String
+  choices        String
+  correctAnswer  String
+  explanation    String?
+  orderIndex     Int
+  createdAt      DateTime     @default(now())
+  quizAnswers    QuizAnswer[]
+}
+
+model QuizSession {
+  id               String       @id @default(cuid())
+  documentId       String
+  document         Document     @relation(fields: [documentId], references: [id])
+  userId           String
+  user             User         @relation(fields: [userId], references: [id])
+  status           String       @default("in_progress")
+  shuffleQuestions Boolean      @default(false)
+  shuffleAnswers   Boolean      @default(true)
+  startedAt        DateTime     @default(now())
+  completedAt      DateTime?
+  answers          QuizAnswer[]
+  result           QuizResult?
+}
+
+model QuizAnswer {
+  id            String      @id @default(cuid())
+  sessionId     String
+  session       QuizSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  questionId    String
+  question      Question    @relation(fields: [questionId], references: [id])
+  selectedAnswer String?
+  isCorrect     Boolean?
+  answeredAt    DateTime    @default(now())
+}
+
+model QuizResult {
+  id              String       @id @default(cuid())
+  sessionId       String       @unique
+  session         QuizSession  @relation(fields: [sessionId], references: [id])
+  userId          String
+  user            User         @relation(fields: [userId], references: [id])
+  documentId      String
+  totalQuestions  Int
+  correctAnswers  Int
+  score           Float
+  timeTaken       Int
+  completedAt     DateTime     @default(now())
+}
