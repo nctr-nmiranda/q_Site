@@ -1,12 +1,7 @@
-import { promises as fs } from 'fs'
-import path from 'path'
+import { prisma } from './db'
 import { v4 as uuidv4 } from 'uuid'
 
-const DATA_DIR = path.join(process.cwd(), 'data')
-const DOCUMENTS_DIR = path.join(DATA_DIR, 'documents')
-const SESSIONS_DIR = path.join(DATA_DIR, 'sessions')
-const QUESTIONNAIRES_DIR = path.join(DATA_DIR, 'questionnaires')
-
+// Reuse original interfaces for compatibility
 export interface Choice {
   id: string
   text: string
@@ -63,54 +58,73 @@ export interface Questionnaire {
   updatedAt: string
 }
 
-async function ensureDir(dir: string) {
-  try {
-    await fs.mkdir(dir, { recursive: true })
-  } catch {}
-}
-
-async function readJson<T>(filePath: string): Promise<T | null> {
-  try {
-    const data = await fs.readFile(filePath, 'utf-8')
-    return JSON.parse(data)
-  } catch {
-    return null
-  }
-}
-
-async function writeJson<T>(filePath: string, data: T): Promise<void> {
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2))
-}
-
 export const storage = {
   async init() {
-    await ensureDir(DOCUMENTS_DIR)
-    await ensureDir(SESSIONS_DIR)
-    await ensureDir(QUESTIONNAIRES_DIR)
+    // No initialization needed for Prisma usually
   },
 
   async getAllDocuments(): Promise<Document[]> {
-    await this.init()
-    const files = await fs.readdir(DOCUMENTS_DIR).catch(() => [])
-    const documents: Document[] = []
-    
-    for (const file of files) {
-      if (file.endsWith('.json')) {
-        const doc = await readJson<Document>(path.join(DOCUMENTS_DIR, file))
-        if (doc) {
-          documents.push(doc)
-        }
+    const docs = await prisma.document.findMany({
+      include: {
+        questions: true
+      },
+      orderBy: {
+        createdAt: 'desc'
       }
-    }
-    
-    return documents.sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    )
+    })
+
+    return docs.map(doc => ({
+      id: doc.id,
+      title: doc.title,
+      filename: doc.filename,
+      filePath: doc.filePath,
+      fileType: doc.fileType,
+      fileSize: doc.fileSize,
+      totalQuestions: doc.totalQuestions,
+      rawText: doc.rawText,
+      status: doc.status,
+      createdAt: doc.createdAt.toISOString(),
+      updatedAt: doc.updatedAt.toISOString(),
+      questions: doc.questions.sort((a, b) => a.orderIndex - b.orderIndex).map(q => ({
+        id: q.id,
+        questionNumber: q.questionNumber,
+        questionText: q.questionText,
+        choices: JSON.parse(q.choices) as Choice[],
+        correctAnswer: q.correctAnswer,
+        explanation: q.explanation
+      }))
+    }))
   },
 
   async getDocument(id: string): Promise<Document | null> {
-    const filePath = path.join(DOCUMENTS_DIR, `${id}.json`)
-    return readJson<Document>(filePath)
+    const doc = await prisma.document.findUnique({
+      where: { id },
+      include: { questions: true }
+    })
+
+    if (!doc) return null
+
+    return {
+      id: doc.id,
+      title: doc.title,
+      filename: doc.filename,
+      filePath: doc.filePath,
+      fileType: doc.fileType,
+      fileSize: doc.fileSize,
+      totalQuestions: doc.totalQuestions,
+      rawText: doc.rawText,
+      status: doc.status,
+      createdAt: doc.createdAt.toISOString(),
+      updatedAt: doc.updatedAt.toISOString(),
+      questions: doc.questions.sort((a, b) => a.orderIndex - b.orderIndex).map(q => ({
+        id: q.id,
+        questionNumber: q.questionNumber,
+        questionText: q.questionText,
+        choices: JSON.parse(q.choices) as Choice[],
+        correctAnswer: q.correctAnswer,
+        explanation: q.explanation
+      }))
+    }
   },
 
   async createDocument(data: {
@@ -122,37 +136,58 @@ export const storage = {
     rawText: string
     questions: Omit<Question, 'id'>[]
   }): Promise<Document> {
-    await this.init()
-    
-    const id = uuidv4()
-    const now = new Date().toISOString()
-    
-    const document: Document = {
-      id,
-      title: data.title,
-      filename: data.filename,
-      filePath: data.filePath,
-      fileType: data.fileType,
-      fileSize: data.fileSize,
-      totalQuestions: data.questions.length,
-      rawText: data.rawText,
-      status: 'completed',
-      createdAt: now,
-      updatedAt: now,
-      questions: data.questions.map((q, index) => ({
-        ...q,
-        id: uuidv4()
+    const doc = await prisma.document.create({
+      data: {
+        title: data.title,
+        filename: data.filename,
+        filePath: data.filePath,
+        fileType: data.fileType,
+        fileSize: data.fileSize,
+        rawText: data.rawText,
+        status: 'completed',
+        totalQuestions: data.questions.length,
+        questions: {
+          create: data.questions.map((q, index) => ({
+            questionNumber: q.questionNumber,
+            questionText: q.questionText,
+            choices: JSON.stringify(q.choices),
+            correctAnswer: q.correctAnswer,
+            explanation: q.explanation,
+            orderIndex: index
+          }))
+        }
+      },
+      include: {
+        questions: true
+      }
+    })
+
+    return {
+      id: doc.id,
+      title: doc.title,
+      filename: doc.filename,
+      filePath: doc.filePath,
+      fileType: doc.fileType,
+      fileSize: doc.fileSize,
+      totalQuestions: doc.totalQuestions,
+      rawText: doc.rawText,
+      status: doc.status,
+      createdAt: doc.createdAt.toISOString(),
+      updatedAt: doc.updatedAt.toISOString(),
+      questions: doc.questions.sort((a, b) => a.orderIndex - b.orderIndex).map(q => ({
+        id: q.id,
+        questionNumber: q.questionNumber,
+        questionText: q.questionText,
+        choices: JSON.parse(q.choices) as Choice[],
+        correctAnswer: q.correctAnswer,
+        explanation: q.explanation
       }))
     }
-    
-    await writeJson(path.join(DOCUMENTS_DIR, `${id}.json`), document)
-    return document
   },
 
   async deleteDocument(id: string): Promise<boolean> {
-    const filePath = path.join(DOCUMENTS_DIR, `${id}.json`)
     try {
-      await fs.unlink(filePath)
+      await prisma.document.delete({ where: { id } })
       return true
     } catch {
       return false
@@ -167,29 +202,36 @@ export const storage = {
     timerEnabled: boolean
     timerMinutes: number | null
   }): Promise<QuizSession> {
-    await this.init()
-    
     const document = await this.getDocument(data.documentId)
     if (!document) {
       throw new Error('Document not found')
     }
-    
+
+    const session = await prisma.quizSession.create({
+      data: {
+        documentId: data.documentId,
+        status: 'in_progress',
+        shuffleQuestions: data.shuffleQuestions,
+        shuffleAnswers: data.shuffleAnswers,
+      }
+    })
+
     let questions = [...document.questions]
-    
+
     if (data.shuffleQuestions) {
       questions = this.shuffleArray(questions)
       questions = questions.map((q, i) => ({ ...q, questionNumber: i + 1 }))
     }
-    
+
     if (data.shuffleAnswers) {
       questions = questions.map(q => ({
         ...q,
         choices: this.shuffleArray(q.choices)
       }))
     }
-    
-    const session: QuizSession = {
-      id: uuidv4(),
+
+    return {
+      id: session.id,
       documentId: data.documentId,
       documentTitle: document.title,
       status: 'in_progress',
@@ -198,60 +240,126 @@ export const storage = {
       questionsPerPage: data.questionsPerPage,
       timerEnabled: data.timerEnabled,
       timerMinutes: data.timerMinutes,
-      startedAt: new Date().toISOString(),
+      startedAt: session.startedAt.toISOString(),
       completedAt: null,
       questions,
       answers: {}
     }
-    
-    await writeJson(path.join(SESSIONS_DIR, `${session.id}.json`), session)
-    return session
   },
 
   async getQuizSession(id: string): Promise<QuizSession | null> {
-    const filePath = path.join(SESSIONS_DIR, `${id}.json`)
-    return readJson<QuizSession>(filePath)
+    const session = await prisma.quizSession.findUnique({
+      where: { id },
+      include: {
+        document: { include: { questions: true } },
+        questionnaire: { include: { questions: true } },
+        answers: true
+      }
+    })
+
+    if (!session) return null
+
+    let questions: Question[] = []
+    let title = ''
+
+    if (session.document) {
+      title = session.document.title
+      questions = session.document.questions.sort((a, b) => a.orderIndex - b.orderIndex).map(q => ({
+        id: q.id,
+        questionNumber: q.questionNumber,
+        questionText: q.questionText,
+        choices: JSON.parse(q.choices) as Choice[],
+        correctAnswer: q.correctAnswer,
+        explanation: q.explanation
+      }))
+    } else if (session.questionnaire) {
+      title = session.questionnaire.name
+      questions = session.questionnaire.questions.sort((a, b) => a.questionNumber - b.questionNumber).map(q => ({
+        id: q.id,
+        questionNumber: q.questionNumber,
+        questionText: q.questionText,
+        choices: JSON.parse(q.choices) as Choice[],
+        correctAnswer: q.correctAnswer,
+        explanation: q.explanation
+      }))
+    }
+
+    const answers: Record<string, { selectedAnswer: string; isCorrect: boolean; correctAnswer: string }> = {}
+    session.answers.forEach(ans => {
+      const q = questions.find(question => question.id === ans.questionId)
+      if (q) {
+        answers[ans.questionId] = {
+          selectedAnswer: ans.selectedAnswer || '',
+          isCorrect: ans.isCorrect || false,
+          correctAnswer: q.correctAnswer
+        }
+      }
+    })
+
+    return {
+      id: session.id,
+      documentId: session.documentId || '',
+      questionnaireId: session.questionnaireId || undefined,
+      documentTitle: title,
+      status: session.status as 'in_progress' | 'completed',
+      shuffleQuestions: session.shuffleQuestions,
+      shuffleAnswers: session.shuffleAnswers,
+      questionsPerPage: 10,
+      timerEnabled: false,
+      timerMinutes: null,
+      startedAt: session.startedAt.toISOString(),
+      completedAt: session.completedAt ? session.completedAt.toISOString() : null,
+      questions,
+      answers
+    }
   },
 
   async saveQuizAnswer(
-    sessionId: string, 
-    questionId: string, 
+    sessionId: string,
+    questionId: string,
     selectedAnswer: string
   ): Promise<{ isCorrect: boolean; correctAnswer: string } | null> {
     const session = await this.getQuizSession(sessionId)
     if (!session || session.status === 'completed') {
       return null
     }
-    
+
     const question = session.questions.find(q => q.id === questionId)
     if (!question) {
       return null
     }
-    
+
     const isCorrect = selectedAnswer === question.correctAnswer
-    
-    session.answers[questionId] = {
-      selectedAnswer,
-      isCorrect,
-      correctAnswer: question.correctAnswer
+
+    // We'll use a transaction to handle upsert manually since we don't have a composite key in schema
+    const existing = await prisma.quizAnswer.findFirst({
+      where: { sessionId, questionId }
+    })
+
+    if (existing) {
+      await prisma.quizAnswer.update({
+        where: { id: existing.id },
+        data: { selectedAnswer, isCorrect }
+      })
+    } else {
+      await prisma.quizAnswer.create({
+        data: { sessionId, questionId, selectedAnswer, isCorrect }
+      })
     }
-    
-    await writeJson(path.join(SESSIONS_DIR, `${sessionId}.json`), session)
-    
+
     return { isCorrect, correctAnswer: question.correctAnswer }
   },
 
   async completeQuizSession(id: string): Promise<QuizSession | null> {
-    const session = await this.getQuizSession(id)
-    if (!session) {
-      return null
-    }
-    
-    session.status = 'completed'
-    session.completedAt = new Date().toISOString()
-    
-    await writeJson(path.join(SESSIONS_DIR, `${id}.json`), session)
-    return session
+    await prisma.quizSession.update({
+      where: { id },
+      data: {
+        status: 'completed',
+        completedAt: new Date()
+      }
+    })
+
+    return this.getQuizSession(id)
   },
 
   shuffleArray<T>(array: T[]): T[] {
@@ -264,27 +372,53 @@ export const storage = {
   },
 
   async getAllQuestionnaires(): Promise<Questionnaire[]> {
-    await this.init()
-    const files = await fs.readdir(QUESTIONNAIRES_DIR).catch(() => [])
-    const questionnaires: Questionnaire[] = []
-    
-    for (const file of files) {
-      if (file.endsWith('.json')) {
-        const q = await readJson<Questionnaire>(path.join(QUESTIONNAIRES_DIR, file))
-        if (q) {
-          questionnaires.push(q)
-        }
-      }
-    }
-    
-    return questionnaires.sort((a, b) => 
-      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    )
+    const qs = await prisma.questionnaire.findMany({
+      include: { questions: true },
+      orderBy: { updatedAt: 'desc' }
+    })
+
+    return qs.map(q => ({
+      id: q.id,
+      name: q.name,
+      examTitle: q.examTitle,
+      totalQuestions: q.totalQuestions,
+      questions: q.questions.sort((a, b) => a.questionNumber - b.questionNumber).map(qq => ({
+        id: qq.id,
+        questionNumber: qq.questionNumber,
+        questionText: qq.questionText,
+        choices: JSON.parse(qq.choices) as Choice[],
+        correctAnswer: qq.correctAnswer,
+        explanation: qq.explanation
+      })),
+      createdAt: q.createdAt.toISOString(),
+      updatedAt: q.updatedAt.toISOString()
+    }))
   },
 
   async getQuestionnaire(id: string): Promise<Questionnaire | null> {
-    const filePath = path.join(QUESTIONNAIRES_DIR, `${id}.json`)
-    return readJson<Questionnaire>(filePath)
+    const q = await prisma.questionnaire.findUnique({
+      where: { id },
+      include: { questions: true }
+    })
+
+    if (!q) return null
+
+    return {
+      id: q.id,
+      name: q.name,
+      examTitle: q.examTitle,
+      totalQuestions: q.totalQuestions,
+      questions: q.questions.sort((a, b) => a.questionNumber - b.questionNumber).map(qq => ({
+        id: qq.id,
+        questionNumber: qq.questionNumber,
+        questionText: qq.questionText,
+        choices: JSON.parse(qq.choices) as Choice[],
+        correctAnswer: qq.correctAnswer,
+        explanation: qq.explanation
+      })),
+      createdAt: q.createdAt.toISOString(),
+      updatedAt: q.updatedAt.toISOString()
+    }
   },
 
   async createQuestionnaire(data: {
@@ -292,26 +426,40 @@ export const storage = {
     examTitle: string
     questions: Omit<Question, 'id'>[]
   }): Promise<Questionnaire> {
-    await this.init()
-    
-    const id = uuidv4()
-    const now = new Date().toISOString()
-    
-    const questionnaire: Questionnaire = {
-      id,
-      name: data.name,
-      examTitle: data.examTitle,
-      totalQuestions: data.questions.length,
-      questions: data.questions.map((q, index) => ({
-        ...q,
-        id: uuidv4()
+    const q = await prisma.questionnaire.create({
+      data: {
+        name: data.name,
+        examTitle: data.examTitle,
+        totalQuestions: data.questions.length,
+        questions: {
+          create: data.questions.map(qq => ({
+            questionNumber: qq.questionNumber,
+            questionText: qq.questionText,
+            choices: JSON.stringify(qq.choices),
+            correctAnswer: qq.correctAnswer,
+            explanation: qq.explanation
+          }))
+        }
+      },
+      include: { questions: true }
+    })
+
+    return {
+      id: q.id,
+      name: q.name,
+      examTitle: q.examTitle,
+      totalQuestions: q.totalQuestions,
+      questions: q.questions.sort((a, b) => a.questionNumber - b.questionNumber).map(qq => ({
+        id: qq.id,
+        questionNumber: qq.questionNumber,
+        questionText: qq.questionText,
+        choices: JSON.parse(qq.choices) as Choice[],
+        correctAnswer: qq.correctAnswer,
+        explanation: qq.explanation
       })),
-      createdAt: now,
-      updatedAt: now
+      createdAt: q.createdAt.toISOString(),
+      updatedAt: q.updatedAt.toISOString()
     }
-    
-    await writeJson(path.join(QUESTIONNAIRES_DIR, `${id}.json`), questionnaire)
-    return questionnaire
   },
 
   async updateQuestionnaire(id: string, data: {
@@ -319,25 +467,43 @@ export const storage = {
     examTitle?: string
     questions?: Question[]
   }): Promise<Questionnaire | null> {
-    const questionnaire = await this.getQuestionnaire(id)
-    if (!questionnaire) {
-      return null
+    if (data.questions) {
+      // Delete existing questions
+      await prisma.questionnaireQuestion.deleteMany({ where: { questionnaireId: id } })
+
+      await prisma.questionnaire.update({
+        where: { id },
+        data: {
+          name: data.name,
+          examTitle: data.examTitle,
+          totalQuestions: data.questions.length,
+          questions: {
+            create: data.questions.map(qq => ({
+              questionNumber: qq.questionNumber,
+              questionText: qq.questionText,
+              choices: JSON.stringify(qq.choices),
+              correctAnswer: qq.correctAnswer,
+              explanation: qq.explanation
+            }))
+          }
+        }
+      })
+    } else {
+      await prisma.questionnaire.update({
+        where: { id },
+        data: {
+          name: data.name,
+          examTitle: data.examTitle,
+        }
+      })
     }
-    
-    questionnaire.name = data.name ?? questionnaire.name
-    questionnaire.examTitle = data.examTitle ?? questionnaire.examTitle
-    questionnaire.questions = data.questions ?? questionnaire.questions
-    questionnaire.totalQuestions = questionnaire.questions.length
-    questionnaire.updatedAt = new Date().toISOString()
-    
-    await writeJson(path.join(QUESTIONNAIRES_DIR, `${id}.json`), questionnaire)
-    return questionnaire
+
+    return this.getQuestionnaire(id)
   },
 
   async deleteQuestionnaire(id: string): Promise<boolean> {
-    const filePath = path.join(QUESTIONNAIRES_DIR, `${id}.json`)
     try {
-      await fs.unlink(filePath)
+      await prisma.questionnaire.delete({ where: { id } })
       return true
     } catch {
       return false
@@ -352,29 +518,36 @@ export const storage = {
     timerEnabled: boolean
     timerMinutes: number | null
   }): Promise<QuizSession> {
-    await this.init()
-    
     const questionnaire = await this.getQuestionnaire(data.questionnaireId)
     if (!questionnaire) {
       throw new Error('Questionnaire not found')
     }
-    
+
+    const session = await prisma.quizSession.create({
+      data: {
+        questionnaireId: data.questionnaireId,
+        status: 'in_progress',
+        shuffleQuestions: data.shuffleQuestions,
+        shuffleAnswers: data.shuffleAnswers,
+      }
+    })
+
     let questions = [...questionnaire.questions]
-    
+
     if (data.shuffleQuestions) {
       questions = this.shuffleArray(questions)
       questions = questions.map((q, i) => ({ ...q, questionNumber: i + 1 }))
     }
-    
+
     if (data.shuffleAnswers) {
       questions = questions.map(q => ({
         ...q,
         choices: this.shuffleArray(q.choices)
       }))
     }
-    
-    const session: QuizSession = {
-      id: uuidv4(),
+
+    return {
+      id: session.id,
       documentId: '',
       questionnaireId: data.questionnaireId,
       documentTitle: questionnaire.name,
@@ -384,13 +557,10 @@ export const storage = {
       questionsPerPage: data.questionsPerPage,
       timerEnabled: data.timerEnabled,
       timerMinutes: data.timerMinutes,
-      startedAt: new Date().toISOString(),
+      startedAt: session.startedAt.toISOString(),
       completedAt: null,
       questions,
       answers: {}
     }
-    
-    await writeJson(path.join(SESSIONS_DIR, `${session.id}.json`), session)
-    return session
   }
 }

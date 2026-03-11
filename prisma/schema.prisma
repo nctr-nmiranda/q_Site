@@ -22,8 +22,8 @@ model User {
 
 model Document {
   id              String     @id @default(cuid())
-  userId          String
-  user            User       @relation(fields: [userId], references: [id])
+  userId          String?
+  user            User?      @relation(fields: [userId], references: [id])
   title           String
   filename        String
   filePath        String
@@ -54,11 +54,15 @@ model Question {
 
 model QuizSession {
   id               String       @id @default(cuid())
-  documentId       String
-  document         Document     @relation(fields: [documentId], references: [id])
-  userId           String
-  user             User         @relation(fields: [userId], references: [id])
+  documentId       String?
+  document         Document?     @relation(fields: [documentId], references: [id])
+  questionnaireId  String?
+  questionnaire    Questionnaire? @relation(fields: [questionnaireId], references: [id])
+  userId           String?
+  user             User?        @relation(fields: [userId], references: [id])
+
   status           String       @default("in_progress")
+
   shuffleQuestions Boolean      @default(false)
   shuffleAnswers   Boolean      @default(true)
   startedAt        DateTime     @default(now())
@@ -82,8 +86,8 @@ model QuizResult {
   id              String       @id @default(cuid())
   sessionId       String       @unique
   session         QuizSession  @relation(fields: [sessionId], references: [id])
-  userId          String
-  user            User         @relation(fields: [userId], references: [id])
+  userId          String?
+  user            User?        @relation(fields: [userId], references: [id])
   documentId      String
   totalQuestions  Int
   correctAnswers  Int
@@ -91,3 +95,29 @@ model QuizResult {
   timeTaken       Int
   completedAt     DateTime     @default(now())
 }
+
+model Questionnaire {
+  id             String       @id @default(cuid())
+  name           String
+  examTitle      String
+  totalQuestions Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  questions      QuestionnaireQuestion[]
+  quizSessions   QuizSession[]
+}
+
+
+model QuestionnaireQuestion {
+  id               String        @id @default(cuid())
+  questionnaireId  String
+  questionnaire    Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+  questionNumber   Int
+  questionText     String
+  choices          String // JSON string of choices
+  correctAnswer    String
+  explanation      String?
+  createdAt        DateTime      @default(now())
+}
+
+
