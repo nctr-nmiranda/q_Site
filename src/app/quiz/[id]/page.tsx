@@ -44,74 +44,75 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
     const initQuiz = async () => {
       const resolvedParams = await params
       const id = resolvedParams.id
-      
+
       let sessionId = id
       let isQuestionnaire = false
-      
+
       try {
+        // Try fetching as a session first
         let res = await fetch(`/api/quiz/${id}`)
         let data = await res.json()
-        
-        if (!data.success || data.error === 'Session not found') {
-          res = await fetch(`/api/questionnaires/${id}`)
-          data = await res.json()
-          
-          if (data.success) {
-            isQuestionnaire = true
-          }
-        }
-        
-        if (isQuestionnaire) {
-          res = await fetch('/api/quiz', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              questionnaireId: id,
-              shuffleQuestions: false,
-              shuffleAnswers: true,
-              questionsPerPage: 10,
-              timerEnabled: false,
-              timerMinutes: null
+
+        // If not found, try as a questionnaire to start a NEW session
+        if (!data.success) {
+          const questionnaireRes = await fetch(`/api/questionnaires/${id}`)
+          const questionnaireData = await questionnaireRes.json()
+
+          if (questionnaireData.success) {
+            // It's a questionnaire ID, start a new session
+            const startRes = await fetch('/api/quiz', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                questionnaireId: id,
+                shuffleQuestions: false,
+                shuffleAnswers: true,
+                questionsPerPage: 10,
+                timerEnabled: false,
+                timerMinutes: null
+              })
             })
-          })
-          data = await res.json()
-          
-          if (data.success) {
-            router.replace(`/quiz/${data.data.sessionId}`)
-            return
+            const startData = await startRes.json()
+
+            if (startData.success) {
+              router.replace(`/quiz/${startData.data.sessionId}`)
+              return
+            } else {
+              alert(startData.error || 'Failed to start quiz')
+              router.push('/upload')
+              return
+            }
           } else {
-            alert(data.error || 'Failed to start quiz')
-            router.push('/questionnaires')
+            // It's neither a session nor a questionnaire
+            alert('Quiz session not found. Please try starting from the dashboard.')
+            router.push('/upload')
             return
           }
         }
-        
-        if (data.success) {
-          const sessionData = data.data
-          
-          if (sessionData.status === 'completed') {
-            router.push(`/results/${id}`)
-            return
-          }
-          
-          setQuizData({
-            sessionId: sessionData.sessionId,
-            documentTitle: sessionData.documentTitle,
-            totalQuestions: sessionData.totalQuestions,
-            questionsPerPage: sessionData.questionsPerPage,
-            timerEnabled: sessionData.timerEnabled,
-            timerMinutes: sessionData.timerMinutes,
-            startedAt: sessionData.startedAt,
-            questions: sessionData.questions
-          })
-          
-          if (sessionData.timerEnabled && sessionData.timerMinutes) {
-            setTimeLeft(sessionData.timerMinutes * 60)
-          }
-        } else {
-          alert(data.error || 'Failed to load quiz')
-          router.push('/questionnaires')
+
+        // At this point, data.success is true (it's a session)
+        const sessionData = data.data
+
+        if (sessionData.status === 'completed') {
+          router.push(`/results/${id}`)
+          return
         }
+
+        setQuizData({
+          sessionId: sessionData.sessionId,
+          documentTitle: sessionData.documentTitle,
+          totalQuestions: sessionData.totalQuestions,
+          questionsPerPage: sessionData.questionsPerPage,
+          timerEnabled: sessionData.timerEnabled,
+          timerMinutes: sessionData.timerMinutes,
+          startedAt: sessionData.startedAt,
+          questions: sessionData.questions
+        })
+
+        if (sessionData.timerEnabled && sessionData.timerMinutes) {
+          setTimeLeft(sessionData.timerMinutes * 60)
+        }
+
       } catch (err) {
         alert('Failed to load quiz')
         router.push('/questionnaires')
@@ -119,13 +120,13 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
         setLoading(false)
       }
     }
-    
+
     initQuiz()
   }, [params, router])
 
   useEffect(() => {
     if (timeLeft === null || timeLeft <= 0 || completed) return
-    
+
     const timer = setInterval(() => {
       setTimeLeft(prev => {
         if (prev === null || prev <= 1) {
@@ -136,13 +137,13 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
       })
       setTimeUsed(prev => prev + 1)
     }, 1000)
-    
+
     return () => clearInterval(timer)
   }, [timeLeft, completed])
 
   const handleAnswer = async (questionId: string, selectedAnswer: string) => {
     if (answers[questionId]?.submitted) return
-    
+
     try {
       const res = await fetch(`/api/quiz/${quizData!.sessionId}/answer`, {
         method: 'POST',
@@ -150,7 +151,7 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
         body: JSON.stringify({ questionId, selectedAnswer })
       })
       const data = await res.json()
-      
+
       if (data.success) {
         setAnswers(prev => ({
           ...prev,
@@ -170,7 +171,7 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
   const handleFinish = async () => {
     if (completed) return
     setCompleted(true)
-    
+
     try {
       await fetch(`/api/quiz/${quizData!.sessionId}`, { method: 'POST' })
       router.push(`/results/${quizData!.sessionId}`)
@@ -230,12 +231,11 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
           <Link href="/upload" className="flex items-center gap-2 text-slate-600 hover:text-slate-900">
             <ArrowLeft className="w-4 h-4" /> Exit
           </Link>
-          
+
           <div className="flex items-center gap-4">
             {quizData.timerEnabled && timeLeft !== null && (
-              <div className={`flex items-center gap-2 px-3 py-1 rounded-lg ${
-                timeLeft < 60 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'
-              }`}>
+              <div className={`flex items-center gap-2 px-3 py-1 rounded-lg ${timeLeft < 60 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'
+                }`}>
                 <Clock className="w-4 h-4" />
                 <span className="font-mono font-semibold">{formatTime(timeLeft)}</span>
               </div>
@@ -245,7 +245,7 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
             </span>
           </div>
         </div>
-        
+
         <div className="max-w-4xl mx-auto px-4 pb-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-slate-700">
@@ -256,9 +256,9 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
             </span>
           </div>
           <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-blue-600 transition-all duration-300" 
-              style={{ width: `${(getAnsweredCount() / quizData.totalQuestions) * 100}%` }} 
+            <div
+              className="h-full bg-blue-600 transition-all duration-300"
+              style={{ width: `${(getAnsweredCount() / quizData.totalQuestions) * 100}%` }}
             />
           </div>
         </div>
@@ -269,7 +269,7 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
           {currentQuestions.map((question, index) => {
             const answer = answers[question.id]
             const isAnswered = answer?.submitted
-            
+
             return (
               <div key={question.id} className="bg-white rounded-2xl border p-6">
                 <div className="flex items-start gap-4 mb-4">
@@ -284,16 +284,16 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
                     )
                   )}
                 </div>
-                
+
                 <p className="text-lg text-slate-900 mb-6">{question.questionText}</p>
-                
+
                 <div className="space-y-3">
                   {question.choices.map((choice) => {
                     const letter = choice.id
                     const isSelected = answer?.submitted && answers[question.id]?.selectedAnswer === letter
                     const isCorrectAnswer = answer?.correctAnswer === letter
                     const showResult = isAnswered
-                    
+
                     let bgClass = 'bg-slate-50 hover:bg-slate-100 border-slate-200'
                     if (showResult) {
                       if (isCorrectAnswer) {
@@ -302,7 +302,7 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
                         bgClass = 'bg-red-50 border-red-300'
                       }
                     }
-                    
+
                     return (
                       <button
                         key={choice.id}
@@ -310,11 +310,10 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
                         disabled={isAnswered}
                         className={`w-full p-4 rounded-xl border-2 text-left flex items-center gap-4 transition-colors ${bgClass} ${!isAnswered ? 'cursor-pointer' : 'cursor-default'}`}
                       >
-                        <span className={`w-10 h-10 rounded-lg flex items-center justify-center font-semibold ${
-                          showResult && isCorrectAnswer ? 'bg-green-500 text-white' :
-                          showResult && isSelected ? 'bg-red-500 text-white' :
-                          'bg-slate-200 text-slate-700'
-                        }`}>
+                        <span className={`w-10 h-10 rounded-lg flex items-center justify-center font-semibold ${showResult && isCorrectAnswer ? 'bg-green-500 text-white' :
+                            showResult && isSelected ? 'bg-red-500 text-white' :
+                              'bg-slate-200 text-slate-700'
+                          }`}>
                           {letter}
                         </span>
                         <span className="text-slate-900 flex-1">{choice.text}</span>
@@ -361,16 +360,15 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
               } else {
                 pageNum = currentPage - 2 + i
               }
-              
+
               return (
                 <button
                   key={pageNum}
                   onClick={() => setCurrentPage(pageNum)}
-                  className={`w-10 h-10 rounded-lg font-medium ${
-                    currentPage === pageNum 
-                      ? 'bg-blue-600 text-white' 
+                  className={`w-10 h-10 rounded-lg font-medium ${currentPage === pageNum
+                      ? 'bg-blue-600 text-white'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
+                    }`}
                 >
                   {pageNum + 1}
                 </button>
