@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { storage } from '@/lib/storage'
 import { parseDocument } from '@/lib/parser/question-parser'
-import { extractTextFromPDF } from '@/lib/parser/pdf-extractor'
 import { extractTextFromDOCX } from '@/lib/parser/docx-extractor'
 
 export async function GET(request: NextRequest) {
@@ -43,14 +42,13 @@ export async function POST(request: NextRequest) {
     }
     
     const allowedTypes = [
-      'application/pdf',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     ]
     
     if (!allowedTypes.includes(file.type)) {
       return NextResponse.json({ 
         success: false, 
-        error: 'Invalid file type. Only PDF and DOCX are allowed.' 
+        error: 'Invalid file type. Only DOCX files are supported.' 
       }, { status: 400 })
     }
     
@@ -65,14 +63,8 @@ export async function POST(request: NextRequest) {
     // Process file in memory - no disk write (works on Vercel)
     const buffer = Buffer.from(await file.arrayBuffer())
     
-    let rawText: string
-    if (file.type === 'application/pdf') {
-      rawText = await extractTextFromPDF(buffer)
-    } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-      rawText = await extractTextFromDOCX(buffer)
-    } else {
-      throw new Error('Unsupported file type')
-    }
+    // Extract text from DOCX
+    const rawText = await extractTextFromDOCX(buffer)
     
     const parseResult = parseDocument(rawText)
     

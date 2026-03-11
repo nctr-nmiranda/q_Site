@@ -71,12 +71,11 @@ export default function UploadPage() {
 
   const validateAndSetFile = (selectedFile: File) => {
     const allowedTypes = [
-      'application/pdf',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     ]
     
     if (!allowedTypes.includes(selectedFile.type)) {
-      setError('Invalid file type. Only PDF and DOCX are allowed.')
+      setError('Invalid file type. Only DOCX files are supported. PDF support coming soon.')
       return
     }
     
@@ -383,7 +382,7 @@ export default function UploadPage() {
           >
             <input
               type="file"
-              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               onChange={handleFileSelect}
               className="hidden"
               id="file-input"
@@ -399,7 +398,7 @@ export default function UploadPage() {
                 or click to browse
               </p>
               <p className="text-sm text-slate-500">
-                Supports PDF and DOCX (max 10MB)
+                Supports DOCX (max 10MB)
               </p>
             </label>
           </div>
