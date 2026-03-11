@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { storage } from '@/lib/storage'
 import { parseDocument } from '@/lib/parser/question-parser'
-import { extractTextFromDOCX } from '@/lib/parser/docx-extractor'
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,41 +30,39 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData()
-    const file = formData.get('file') as File | null
+    const contentType = request.headers.get('content-type') || ''
     
-    if (!file) {
+    let rawText: string
+    let filename: string
+    
+    // Check if receiving JSON with pre-extracted text (client-side extraction)
+    if (contentType.includes('application/json')) {
+      const body = await request.json()
+      
+      if (body.text) {
+        rawText = body.text
+        filename = body.filename || 'document.txt'
+      } else if (body.file) {
+        // Old format - file as base64
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Please use the updated upload method. Refresh the page and try again.' 
+        }, { status: 400 })
+      } else {
+        return NextResponse.json({ 
+          success: false, 
+          error: 'No text content provided' 
+        }, { status: 400 })
+      }
+    } else {
+      // Old formData format - try to parse but likely won't work on Vercel
       return NextResponse.json({ 
         success: false, 
-        error: 'No file provided' 
+        error: 'Please refresh the page and try again.' 
       }, { status: 400 })
     }
     
-    const allowedTypes = [
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ]
-    
-    if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Invalid file type. Only DOCX files are supported.' 
-      }, { status: 400 })
-    }
-    
-    const maxSize = 10 * 1024 * 1024
-    if (file.size > maxSize) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'File too large. Maximum size is 10MB.' 
-      }, { status: 400 })
-    }
-    
-    // Process file in memory - no disk write (works on Vercel)
-    const buffer = Buffer.from(await file.arrayBuffer())
-    
-    // Extract text from DOCX
-    const rawText = await extractTextFromDOCX(buffer)
-    
+    // Parse the extracted text
     const parseResult = parseDocument(rawText)
     
     const questions = parseResult.questions.map(q => ({
@@ -76,12 +73,20 @@ export async function POST(request: NextRequest) {
       explanation: q.explanation
     }))
     
+    // Validate we got some questions
+    if (questions.length === 0) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'No questions found in document. Please check the format.' 
+      }, { status: 400 })
+    }
+    
     const document = await storage.createDocument({
-      title: parseResult.examTitle || file.name.replace(/\.[^/.]+$/, ''),
-      filename: file.name,
-      filePath: '', // Not saving file to disk
-      fileType: file.type,
-      fileSize: file.size,
+      title: parseResult.examTitle || filename.replace(/\.[^/.]+$/, ''),
+      filename,
+      filePath: '',
+      fileType: 'text/plain',
+      fileSize: rawText.length,
       rawText,
       questions
     })
@@ -106,7 +111,7 @@ export async function POST(request: NextRequest) {
     console.error('Error processing document:', error)
     return NextResponse.json({ 
       success: false, 
-      error: 'Failed to process document' 
+      error: 'Failed to process document. Please try again.' 
     }, { status: 500 })
   }
 }

@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { FileText, Upload, X, CheckCircle, AlertCircle, Clock, Shuffle, Layers, Save, Database } from 'lucide-react'
+import mammoth from 'mammoth'
 
 interface QuizConfig {
   shuffleQuestions: boolean
@@ -97,24 +98,34 @@ export default function UploadPage() {
     if (!file) return
     
     setUploading(true)
-    setProgress(0)
+    setProgress(10)
     setError('')
     
-    const formData = new FormData()
-    formData.append('file', file)
-    
     try {
-      const progressInterval = setInterval(() => {
-        setProgress(p => Math.min(p + 10, 80))
-      }, 200)
+      // Extract text client-side using mammoth
+      const arrayBuffer = await file.arrayBuffer()
+      const result = await mammoth.extractRawText({ arrayBuffer })
+      const extractedText = result.value
       
+      if (!extractedText || extractedText.length < 10) {
+        setError('Could not extract text from file. Please check the file format.')
+        setUploading(false)
+        return
+      }
+      
+      setProgress(50)
+      
+      // Send extracted text to API as JSON
       const res = await fetch('/api/documents', {
         method: 'POST',
-        body: formData
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: extractedText,
+          filename: file.name
+        })
       })
       
-      clearInterval(progressInterval)
-      setProgress(100)
+      setProgress(90)
       
       const data = await res.json()
       
@@ -123,12 +134,14 @@ export default function UploadPage() {
         setQuestionnaireName(data.data.title)
         setSuccess(true)
       } else {
-        setError(data.error || 'Upload failed')
+        setError(data.error || 'Failed to process document')
       }
     } catch (err) {
-      setError('Failed to upload file')
+      console.error('Upload error:', err)
+      setError('Failed to process file. Please try again.')
     } finally {
       setUploading(false)
+      setProgress(100)
     }
   }
 
