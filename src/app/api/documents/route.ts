@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { promises as fs } from 'fs'
-import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 import { storage } from '@/lib/storage'
 import { parseDocument } from '@/lib/parser/question-parser'
@@ -64,15 +62,8 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
     
-    const uploadDir = path.join(process.cwd(), 'uploads')
-    await fs.mkdir(uploadDir, { recursive: true })
-    
-    const ext = file.name.split('.').pop()
-    const filename = `${uuidv4()}.${ext}`
-    const filePath = path.join(uploadDir, filename)
-    
+    // Process file in memory - no disk write (works on Vercel)
     const buffer = Buffer.from(await file.arrayBuffer())
-    await fs.writeFile(filePath, buffer)
     
     let rawText: string
     if (file.type === 'application/pdf') {
@@ -96,7 +87,7 @@ export async function POST(request: NextRequest) {
     const document = await storage.createDocument({
       title: parseResult.examTitle || file.name.replace(/\.[^/.]+$/, ''),
       filename: file.name,
-      filePath: `/uploads/${filename}`,
+      filePath: '', // Not saving file to disk
       fileType: file.type,
       fileSize: file.size,
       rawText,
