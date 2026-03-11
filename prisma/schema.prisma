@@ -20,10 +20,7 @@ model User {
   documents    Document[]
   quizSessions QuizSession[]
   quizResults  QuizResult[]
-
-  @@map("dq_users")
 }
-
 
 model Document {
   id             String        @id @default(cuid())
@@ -41,10 +38,7 @@ model Document {
   updatedAt      DateTime      @updatedAt
   questions      Question[]
   quizSessions   QuizSession[]
-
-  @@map("dq_documents")
 }
-
 
 model Question {
   id             String       @id @default(cuid())
@@ -58,10 +52,7 @@ model Question {
   orderIndex     Int
   createdAt      DateTime     @default(now())
   quizAnswers    QuizAnswer[]
-
-  @@map("dq_questions")
 }
-
 
 model QuizSession {
   id              String         @id @default(cuid())
@@ -80,10 +71,7 @@ model QuizSession {
   completedAt      DateTime?
   answers          QuizAnswer[]
   result           QuizResult?
-
-  @@map("dq_quiz_sessions")
 }
-
 
 model QuizAnswer {
   id             String      @id @default(cuid())
@@ -94,10 +82,7 @@ model QuizAnswer {
   selectedAnswer String?
   isCorrect      Boolean?
   answeredAt     DateTime    @default(now())
-
-  @@map("dq_quiz_answers")
 }
-
 
 model QuizResult {
   id             String      @id @default(cuid())
@@ -111,10 +96,7 @@ model QuizResult {
   score          Float
   timeTaken      Int
   completedAt    DateTime    @default(now())
-
-  @@map("dq_quiz_results")
 }
-
 
 model Questionnaire {
   id             String                  @id @default(cuid())
@@ -125,10 +107,7 @@ model Questionnaire {
   updatedAt      DateTime                @updatedAt
   questions      QuestionnaireQuestion[]
   quizSessions   QuizSession[]
-
-  @@map("dq_questionnaires")
 }
-
 
 model QuestionnaireQuestion {
   id              String        @id @default(cuid())
@@ -140,7 +119,6 @@ model QuestionnaireQuestion {
   correctAnswer   String
   explanation     String?
   createdAt       DateTime      @default(now())
-
-  @@map("dq_questionnaire_questions")
 }
+
 
