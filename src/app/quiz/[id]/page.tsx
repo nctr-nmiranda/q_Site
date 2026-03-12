@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, CheckCircle, XCircle, ArrowLeft, Clock, Eye, EyeOff } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CheckCircle, XCircle, ArrowLeft, Clock, Eye, EyeOff, BookOpen, BookOpenCheck } from 'lucide-react'
 
 interface Choice {
   id: string
@@ -40,6 +40,7 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
   const [timeUsed, setTimeUsed] = useState(0)
   const [showAnswers, setShowAnswers] = useState(false)
+  const [showExplanations, setShowExplanations] = useState(false)
 
   useEffect(() => {
     const initQuiz = async () => {
@@ -255,22 +256,51 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
             <span className="text-sm text-slate-600">
               {getAnsweredCount()}/{quizData.totalQuestions} answered
             </span>
-            {getAnsweredCount() > 0 && (
+            {getAnsweredCount() > 0 && !showAnswers && (
               <button
                 onClick={() => {
-                  if (!showAnswers) {
-                    handleShowAnswers()
-                  }
-                  setShowAnswers(!showAnswers)
+                  handleShowAnswers()
+                  setShowAnswers(true)
                 }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700"
+              >
+                <Eye className="w-4 h-4" />
+                Show Answers
+              </button>
+            )}
+            {showAnswers && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAnswers(false)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-blue-100 text-blue-700"
+                >
+                  <EyeOff className="w-4 h-4" />
+                  Hide Answers
+                </button>
+                <button
+                  onClick={() => setShowExplanations(!showExplanations)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    showExplanations 
+                      ? 'bg-amber-100 text-amber-700' 
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {showExplanations ? <BookOpenCheck className="w-4 h-4" /> : <BookOpen className="w-4 h-4" />}
+                  {showExplanations ? 'Hide Explanations' : 'Show Explanations'}
+                </button>
+              </div>
+            )}
+            {showAnswers && (
+              <button
+                onClick={() => setShowExplanations(!showExplanations)}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  showAnswers 
-                    ? 'bg-blue-100 text-blue-700' 
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                  showExplanations 
+                    ? 'bg-amber-100 text-amber-700' 
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                {showAnswers ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                {showAnswers ? 'Hide Answers' : 'Show Answers'}
+                {showExplanations ? <BookOpenCheck className="w-4 h-4" /> : <BookOpen className="w-4 h-4" />}
+                {showExplanations ? 'Hide Explanations' : 'Show Explanations'}
               </button>
             )}
           </div>
@@ -365,7 +395,7 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
                   })}
                 </div>
 
-                {isAnswered && question.explanation && (
+                {isAnswered && showAnswers && showExplanations && question.explanation && (
                   <div className="bg-blue-50 rounded-xl p-4 mt-4">
                     <h4 className="font-semibold text-blue-900 mb-2">Explanation</h4>
                     <p className="text-blue-800">{question.explanation}</p>
