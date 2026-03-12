@@ -115,14 +115,13 @@ export function QuizHeader({
             )}
           </button>
 
-          {showAnswers && summaryData && (
+          {answeredCount > 0 && summaryData && (
             <div className="flex items-center gap-2 text-sm whitespace-nowrap">
-              {summaryData.pending > 0 && (
+              {summaryData.pending > 0 ? (
                 <span className="text-amber-600 font-medium">
                   {summaryData.correct}/{summaryData.total + summaryData.pending} <span className="text-amber-500">⏳{summaryData.pending}</span>
                 </span>
-              )}
-              {summaryData.pending === 0 && (
+              ) : (
                 <span className="font-medium">
                   <span className="text-green-600">{summaryData.correct}/{summaryData.total}</span>
                   <span className="text-slate-400 mx-1">|</span>
