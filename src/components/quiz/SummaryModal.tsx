@@ -62,23 +62,17 @@ export function SummaryModal({
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="space-y-4">
-            <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-sm text-slate-500 mb-1">Total Questions</div>
-              <div className="text-2xl font-bold text-slate-900">{summaryData.total}</div>
+            <div className="bg-blue-50 rounded-xl p-6 text-center">
+              <div className="text-sm text-blue-600 mb-1">Total Answered</div>
+              <div className="text-4xl font-bold text-blue-700">{summaryData.total}</div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-slate-50 rounded-xl p-4">
-                <div className="text-sm text-slate-500 mb-1">Answered</div>
-                <div className="text-xl font-bold text-slate-900">{summaryData.answered}</div>
+            {summaryData.pending > 0 && (
+              <div className="bg-amber-50 rounded-xl p-4">
+                <div className="text-sm text-amber-600 mb-1">Pending</div>
+                <div className="text-xl font-bold text-amber-700">{summaryData.pending}</div>
               </div>
-              {summaryData.pending > 0 && (
-                <div className="bg-amber-50 rounded-xl p-4">
-                  <div className="text-sm text-amber-600 mb-1">Pending</div>
-                  <div className="text-xl font-bold text-amber-700">{summaryData.pending}</div>
-                </div>
-              )}
-            </div>
+            )}
 
             {showRevealed && (
               <>

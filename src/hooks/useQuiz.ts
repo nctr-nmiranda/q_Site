@@ -163,15 +163,15 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
   }, [currentPage, saveToStorage])
 
   const summaryData = useMemo(() => {
-    const total = initialData.totalQuestions
     const answered = Object.values(answers).filter(a => a.submitted).length
     const pending = Object.values(answers).filter(a => a.pending).length
+    const total = answered + pending
     const correct = Object.values(answers).filter(a => a.submitted && !a.pending && a.isCorrect).length
     const incorrect = Object.values(answers).filter(a => a.submitted && !a.pending && !a.isCorrect).length
     const score = answered > 0 ? Math.round((correct / answered) * 100) : 0
     
     return { total, answered, pending, correct, incorrect, score }
-  }, [answers, initialData.totalQuestions])
+  }, [answers])
 
   const showAnswerResults = useCallback(async () => {
     setShowAnswersLoading(true)
