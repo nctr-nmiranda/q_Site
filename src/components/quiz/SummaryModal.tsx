@@ -30,25 +30,37 @@ export function SummaryModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div 
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+    >
       <div 
-        className="absolute inset-0 bg-black/50"
+        className="absolute inset-0 bg-black/50 touch-auto"
         onClick={onClose}
+        aria-hidden="true"
       />
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 overflow-hidden">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-slate-900">Quiz Summary</h2>
+      <div className={cn(
+        "relative bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-sm mx-0 sm:mx-4",
+        "max-h-[85vh] flex flex-col",
+        "animate-in slide-in-from-bottom duration-200"
+      )}>
+        <div className="flex-shrink-0 p-4 sm:p-6 border-b border-slate-100">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900">Quiz Summary</h2>
             <button
               onClick={onClose}
-              className="p-2 -mr-2 text-slate-400 hover:text-slate-600 rounded-lg"
+              className="p-2 -mr-2 text-slate-400 hover:text-slate-600 rounded-lg touch-manipulation"
+              aria-label="Close"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
+        </div>
 
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="space-y-4">
             <div className="bg-slate-50 rounded-xl p-4">
               <div className="text-sm text-slate-500 mb-1">Total Questions</div>
@@ -100,25 +112,27 @@ export function SummaryModal({
               </>
             )}
           </div>
+        </div>
 
-          <div className="mt-6 space-y-3">
-            <Button
-              variant="outline"
-              fullWidth
-              onClick={onRetake}
-            >
-              Retake Quiz
-            </Button>
-            <Button
-              variant="primary"
-              fullWidth
-              onClick={onSubmit}
-              loading={isSubmitting}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              {isSubmitting ? 'Submitting...' : 'Submit Quiz'}
-            </Button>
-          </div>
+        <div className="flex-shrink-0 p-4 sm:p-6 border-t border-slate-100 space-y-3">
+          <Button
+            variant="outline"
+            fullWidth
+            size="lg"
+            onClick={onRetake}
+          >
+            Retake Quiz
+          </Button>
+          <Button
+            variant="primary"
+            fullWidth
+            size="lg"
+            onClick={onSubmit}
+            loading={isSubmitting}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            {isSubmitting ? 'Submitting...' : 'Submit Quiz'}
+          </Button>
         </div>
       </div>
     </div>
