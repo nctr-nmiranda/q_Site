@@ -45,101 +45,54 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
       const resolvedParams = await params
       const id = resolvedParams.id
 
-      let sessionId = id
-      let isQuestionnaire = false
-
       try {
-        // Try fetching as a session first
-        let res = await fetch(`/api/quiz/${id}`)
-        let data = await res.json()
+        const res = await fetch('/api/quiz/resolve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        })
+        const data = await res.json()
 
-        // If not found, try as a questionnaire to start a NEW session
         if (!data.success) {
-          const questionnaireRes = await fetch(`/api/questionnaires/${id}`)
-          const questionnaireData = await questionnaireRes.json()
-
-          if (questionnaireData.success) {
-            // It's a questionnaire ID, start a new session
-            const startRes = await fetch('/api/quiz', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                questionnaireId: id,
-                shuffleQuestions: false,
-                shuffleAnswers: true,
-                questionsPerPage: 10,
-                timerEnabled: false,
-                timerMinutes: null
-              })
-            })
-            const startData = await startRes.json()
-
-            if (startData.success) {
-              router.replace(`/quiz/${startData.data.sessionId}`)
-              return
-            } else {
-              alert(startData.error || 'Failed to start quiz')
-              router.push('/upload')
-              return
-            }
-          }
-
-          // Try as a document - create a new quiz session from the document
-          const documentRes = await fetch(`/api/documents/${id}`)
-          const documentData = await documentRes.json()
-
-          if (documentData.success) {
-            const startRes = await fetch('/api/quiz', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                documentId: id,
-                shuffleQuestions: false,
-                shuffleAnswers: true,
-                questionsPerPage: 10,
-                timerEnabled: false,
-                timerMinutes: null
-              })
-            })
-            const startData = await startRes.json()
-
-            if (startData.success) {
-              router.replace(`/quiz/${startData.data.sessionId}`)
-              return
-            } else {
-              alert(startData.error || 'Failed to start quiz from document')
-              router.push('/upload')
-              return
-            }
-          }
-
-          // It's neither a session, questionnaire, nor document
-          alert('Quiz session not found. Please try starting from the dashboard.')
+          alert(data.error || 'Quiz not found')
           router.push('/upload')
           return
         }
 
-        // At this point, data.success is true (it's a session)
-        const sessionData = data.data
+        if (data.data.type === 'session' && data.data.sessionId !== id) {
+          router.replace(`/quiz/${data.data.sessionId}`)
+          return
+        }
 
-        if (sessionData.status === 'completed') {
+        if (data.data.type === 'completed') {
           router.push(`/results/${id}`)
           return
         }
 
+        const sessionRes = await fetch(`/api/quiz/${id}`)
+        const sessionData = await sessionRes.json()
+
+        if (!sessionData.success) {
+          alert('Failed to load quiz')
+          router.push('/upload')
+          return
+        }
+
+        const session = sessionData.data
+
         setQuizData({
-          sessionId: sessionData.sessionId,
-          documentTitle: sessionData.documentTitle,
-          totalQuestions: sessionData.totalQuestions,
-          questionsPerPage: sessionData.questionsPerPage,
-          timerEnabled: sessionData.timerEnabled,
-          timerMinutes: sessionData.timerMinutes,
-          startedAt: sessionData.startedAt,
-          questions: sessionData.questions
+          sessionId: session.sessionId,
+          documentTitle: session.documentTitle,
+          totalQuestions: session.totalQuestions,
+          questionsPerPage: session.questionsPerPage,
+          timerEnabled: session.timerEnabled,
+          timerMinutes: session.timerMinutes,
+          startedAt: session.startedAt,
+          questions: session.questions
         })
 
-        if (sessionData.timerEnabled && sessionData.timerMinutes) {
-          setTimeLeft(sessionData.timerMinutes * 60)
+        if (session.timerEnabled && session.timerMinutes) {
+          setTimeLeft(session.timerMinutes * 60)
         }
 
       } catch (err) {
