@@ -108,8 +108,8 @@ export function QuestionCard({
             text={choice.text}
             state={getAnswerState(choice.id)}
             showCorrect={showAnswer}
-            onClick={() => !answer?.submitted && onSelectAnswer(choice.id)}
-            disabled={answer?.submitted && showAnswer}
+            onClick={() => !showAnswer && onSelectAnswer(choice.id)}
+            disabled={showAnswer}
           />
         ))}
       </div>

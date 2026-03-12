@@ -45,6 +45,8 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
   const [questionsPerPage, setQuestionsPerPage] = useState(initialData.questionsPerPage || 10)
   const [showAnswers, setShowAnswers] = useState(false)
   const [showExplanations, setShowExplanations] = useState(false)
+  const [showAnswersLoading, setShowAnswersLoading] = useState(false)
+  const [showSummaryModal, setShowSummaryModal] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
@@ -160,9 +162,21 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
     })
   }, [currentPage, saveToStorage])
 
+  const summaryData = useMemo(() => {
+    const total = initialData.totalQuestions
+    const answered = Object.values(answers).filter(a => a.submitted).length
+    const pending = Object.values(answers).filter(a => a.pending).length
+    const correct = Object.values(answers).filter(a => a.submitted && !a.pending && a.isCorrect).length
+    const incorrect = Object.values(answers).filter(a => a.submitted && !a.pending && !a.isCorrect).length
+    const score = answered > 0 ? Math.round((correct / answered) * 100) : 0
+    
+    return { total, answered, pending, correct, incorrect, score }
+  }, [answers, initialData.totalQuestions])
+
   const showAnswerResults = useCallback(async () => {
-    if (pendingAnswers.length > 0) {
-      try {
+    setShowAnswersLoading(true)
+    try {
+      if (pendingAnswers.length > 0) {
         const result = await onSubmitBatch(pendingAnswers)
         
         setAnswers(prev => {
@@ -181,11 +195,14 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
           setHasUnsavedChanges(false)
           return updated
         })
-      } catch (error) {
-        console.error('Failed to submit answers:', error)
       }
+      setShowAnswers(true)
+      setShowSummaryModal(true)
+    } catch (error) {
+      console.error('Failed to submit answers:', error)
+    } finally {
+      setShowAnswersLoading(false)
     }
-    setShowAnswers(true)
   }, [pendingAnswers, onSubmitBatch, currentPage, saveToStorage])
 
   const toggleExplanations = useCallback(() => {
@@ -235,10 +252,18 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
     }
   }, [pendingAnswers, onSubmitBatch, onSubmitQuiz, storageKey])
 
-  const clearAnswers = useCallback(() => {
+  const retakeQuiz = useCallback(() => {
     setAnswers({})
+    setCurrentPage(1)
+    setShowAnswers(false)
+    setShowExplanations(false)
+    setShowSummaryModal(false)
     localStorage.removeItem(storageKey)
   }, [storageKey])
+
+  const closeSummaryModal = useCallback(() => {
+    setShowSummaryModal(false)
+  }, [])
 
   return {
     answers,
@@ -251,6 +276,9 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
     answeredOnPage,
     showAnswers,
     showExplanations,
+    showAnswersLoading,
+    showSummaryModal,
+    summaryData,
     isSubmitting,
     hasUnsavedChanges,
     selectAnswer,
@@ -261,6 +289,7 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
     previousPage,
     changeQuestionsPerPage,
     submitQuiz,
-    clearAnswers
+    retakeQuiz,
+    closeSummaryModal
   }
 }
