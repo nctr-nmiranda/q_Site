@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, CheckCircle, XCircle, ArrowLeft, Clock } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CheckCircle, XCircle, ArrowLeft, Clock, Eye, EyeOff } from 'lucide-react'
 
 interface Choice {
   id: string
@@ -34,11 +34,12 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
   const router = useRouter()
   const [quizData, setQuizData] = useState<QuizData | null>(null)
   const [currentPage, setCurrentPage] = useState(0)
-  const [answers, setAnswers] = useState<Record<string, { isCorrect: boolean; correctAnswer: string; submitted: boolean; selectedAnswer: string }>>({})
+  const [answers, setAnswers] = useState<Record<string, { isCorrect: boolean; correctAnswer: string; submitted: boolean; selectedAnswer: string; pending?: boolean }>>({})
   const [loading, setLoading] = useState(true)
   const [completed, setCompleted] = useState(false)
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
   const [timeUsed, setTimeUsed] = useState(0)
+  const [showAnswers, setShowAnswers] = useState(false)
 
   useEffect(() => {
     const initQuiz = async () => {
@@ -123,30 +124,59 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
     return () => clearInterval(timer)
   }, [timeLeft, completed])
 
-  const handleAnswer = async (questionId: string, selectedAnswer: string) => {
-    if (answers[questionId]?.submitted) return
+  const handleAnswer = (questionId: string, selectedAnswer: string) => {
+    if (answers[questionId]?.submitted && !answers[questionId]?.pending) return
+
+    setAnswers(prev => ({
+      ...prev,
+      [questionId]: {
+        isCorrect: false,
+        correctAnswer: '',
+        submitted: true,
+        selectedAnswer,
+        pending: true
+      }
+    }))
+  }
+
+  const handleShowAnswers = async () => {
+    const pendingAnswers = Object.entries(answers).filter(
+      ([_, a]) => a.pending
+    )
+
+    if (pendingAnswers.length === 0) return
 
     try {
-      const res = await fetch(`/api/quiz/${quizData!.sessionId}/answer`, {
+      const res = await fetch(`/api/quiz/${quizData!.sessionId}/answer/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questionId, selectedAnswer })
+        body: JSON.stringify({
+          answers: pendingAnswers.map(([questionId, a]) => ({
+            questionId,
+            selectedAnswer: a.selectedAnswer
+          }))
+        })
       })
       const data = await res.json()
 
       if (data.success) {
-        setAnswers(prev => ({
-          ...prev,
-          [questionId]: {
-            isCorrect: data.data.isCorrect,
-            correctAnswer: data.data.correctAnswer,
-            submitted: true,
-            selectedAnswer
-          }
-        }))
+        setAnswers(prev => {
+          const updated = { ...prev }
+          data.data.results.forEach((result: any) => {
+            if (updated[result.questionId]) {
+              updated[result.questionId] = {
+                ...updated[result.questionId],
+                isCorrect: result.isCorrect,
+                correctAnswer: result.correctAnswer,
+                pending: false
+              }
+            }
+          })
+          return updated
+        })
       }
     } catch (err) {
-      console.error('Failed to submit answer:', err)
+      console.error('Failed to submit answers:', err)
     }
   }
 
@@ -225,6 +255,24 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
             <span className="text-sm text-slate-600">
               {getAnsweredCount()}/{quizData.totalQuestions} answered
             </span>
+            {getAnsweredCount() > 0 && (
+              <button
+                onClick={() => {
+                  if (!showAnswers) {
+                    handleShowAnswers()
+                  }
+                  setShowAnswers(!showAnswers)
+                }}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  showAnswers 
+                    ? 'bg-blue-100 text-blue-700' 
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {showAnswers ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showAnswers ? 'Hide Answers' : 'Show Answers'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -258,12 +306,15 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
                   <span className="bg-blue-100 text-blue-700 font-semibold px-3 py-1 rounded-lg text-sm">
                     Q{question.questionNumber}
                   </span>
-                  {isAnswered && (
+                  {isAnswered && showAnswers && (
                     answer.isCorrect ? (
                       <CheckCircle className="w-5 h-5 text-green-500" />
                     ) : (
                       <XCircle className="w-5 h-5 text-red-500" />
                     )
+                  )}
+                  {answer?.pending && (
+                    <span className="text-sm text-amber-600">Pending...</span>
                   )}
                 </div>
 
@@ -274,9 +325,12 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
                     const letter = choice.id
                     const isSelected = answer?.submitted && answers[question.id]?.selectedAnswer === letter
                     const isCorrectAnswer = answer?.correctAnswer === letter
-                    const showResult = isAnswered
+                    const showResult = isAnswered && showAnswers
 
                     let bgClass = 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                    if (isSelected && !showAnswers) {
+                      bgClass = 'bg-blue-50 border-blue-300'
+                    }
                     if (showResult) {
                       if (isCorrectAnswer) {
                         bgClass = 'bg-green-50 border-green-300'
@@ -289,12 +343,13 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
                       <button
                         key={choice.id}
                         onClick={() => handleAnswer(question.id, letter)}
-                        disabled={isAnswered}
-                        className={`w-full p-4 rounded-xl border-2 text-left flex items-center gap-4 transition-colors ${bgClass} ${!isAnswered ? 'cursor-pointer' : 'cursor-default'}`}
+                        disabled={isAnswered && showAnswers}
+                        className={`w-full p-4 rounded-xl border-2 text-left flex items-center gap-4 transition-colors ${bgClass} ${!isAnswered || !showAnswers ? 'cursor-pointer' : 'cursor-default'}`}
                       >
                         <span className={`w-10 h-10 rounded-lg flex items-center justify-center font-semibold ${showResult && isCorrectAnswer ? 'bg-green-500 text-white' :
                             showResult && isSelected ? 'bg-red-500 text-white' :
-                              'bg-slate-200 text-slate-700'
+                              isSelected && !showAnswers ? 'bg-blue-500 text-white' :
+                                'bg-slate-200 text-slate-700'
                           }`}>
                           {letter}
                         </span>
