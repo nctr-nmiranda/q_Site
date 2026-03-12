@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useQuiz, QuizData } from '@/hooks/useQuiz'
-import { QuizHeader, QuizFooter, QuestionCard, SummaryModal } from '@/components/quiz'
+import { QuizHeader, QuizFooter, QuestionCard } from '@/components/quiz'
 import { Button } from '@/components/ui'
 
 export default function QuizPage() {
@@ -153,7 +153,6 @@ export default function QuizPage() {
     showAnswers,
     showExplanations,
     showAnswersLoading,
-    showSummaryModal,
     summaryData,
     isSubmitting,
     selectAnswer,
@@ -163,8 +162,7 @@ export default function QuizPage() {
     nextPage,
     previousPage,
     submitQuiz,
-    retakeQuiz,
-    closeSummaryModal
+    retakeQuiz
   } = quizState
 
   return (
@@ -179,6 +177,7 @@ export default function QuizPage() {
         showAnswers={showAnswers}
         showExplanations={showExplanations}
         showAnswersLoading={showAnswersLoading}
+        summaryData={summaryData}
         onToggleAnswers={showAnswerResults}
         onToggleExplanations={toggleExplanations}
         onExit={handleExit}
@@ -207,16 +206,6 @@ export default function QuizPage() {
         onPreviousPage={previousPage}
         onNextPage={nextPage}
         onJumpToPage={goToPage}
-        onSubmit={submitQuiz}
-        isSubmitting={isSubmitting}
-      />
-
-      <SummaryModal
-        isOpen={showSummaryModal}
-        onClose={closeSummaryModal}
-        summaryData={summaryData}
-        showRevealed={showAnswers}
-        onRetake={retakeQuiz}
         onSubmit={submitQuiz}
         isSubmitting={isSubmitting}
       />
