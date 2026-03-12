@@ -40,24 +40,29 @@ export function QuestionCard({
   className
 }: QuestionCardProps) {
   const getAnswerState = (letter: string): AnswerState => {
-    if (!answer?.submitted && !answer?.pending) {
+    // No answer for this question yet
+    if (!answer) {
       return 'default'
     }
 
-    if (answer.pending) {
+    // Has selected an answer but not submitted to server yet
+    if (answer.submitted && answer.pending && answer.selectedAnswer === letter) {
       return 'selected'
     }
 
-    if (!showAnswer) {
-      return answer.selectedAnswer === letter ? 'selected' : 'default'
+    // Has selected an answer (not revealed yet)
+    if (answer.submitted && !showAnswer && answer.selectedAnswer === letter) {
+      return 'selected'
     }
 
-    if (letter === answer.correctAnswer) {
-      return 'correct'
-    }
-
-    if (letter === answer.selectedAnswer && !answer.isCorrect) {
-      return 'incorrect'
+    // Show correct/incorrect after reveal
+    if (showAnswer && answer.submitted) {
+      if (letter === answer.correctAnswer) {
+        return 'correct'
+      }
+      if (letter === answer.selectedAnswer && !answer.isCorrect) {
+        return 'incorrect'
+      }
     }
 
     return 'default'
