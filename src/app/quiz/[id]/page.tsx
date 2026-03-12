@@ -82,12 +82,41 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
               router.push('/upload')
               return
             }
-          } else {
-            // It's neither a session nor a questionnaire
-            alert('Quiz session not found. Please try starting from the dashboard.')
-            router.push('/upload')
-            return
           }
+
+          // Try as a document - create a new quiz session from the document
+          const documentRes = await fetch(`/api/documents/${id}`)
+          const documentData = await documentRes.json()
+
+          if (documentData.success) {
+            const startRes = await fetch('/api/quiz', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                documentId: id,
+                shuffleQuestions: false,
+                shuffleAnswers: true,
+                questionsPerPage: 10,
+                timerEnabled: false,
+                timerMinutes: null
+              })
+            })
+            const startData = await startRes.json()
+
+            if (startData.success) {
+              router.replace(`/quiz/${startData.data.sessionId}`)
+              return
+            } else {
+              alert(startData.error || 'Failed to start quiz from document')
+              router.push('/upload')
+              return
+            }
+          }
+
+          // It's neither a session, questionnaire, nor document
+          alert('Quiz session not found. Please try starting from the dashboard.')
+          router.push('/upload')
+          return
         }
 
         // At this point, data.success is true (it's a session)
