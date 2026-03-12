@@ -3,13 +3,11 @@ generator client {
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
-
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
-
 
 model User {
   id           String        @id @default(cuid())
@@ -20,14 +18,13 @@ model User {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   documents    Document[]
-  quizSessions QuizSession[]
   quizResults  QuizResult[]
+  quizSessions QuizSession[]
 }
 
 model Document {
   id             String        @id @default(cuid())
   userId         String?
-  user           User?         @relation(fields: [userId], references: [id])
   title          String
   filename       String
   filePath       String
@@ -38,6 +35,7 @@ model Document {
   totalQuestions Int           @default(0)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+  user           User?         @relation(fields: [userId], references: [id])
   questions      Question[]
   quizSessions   QuizSession[]
 }
@@ -45,7 +43,6 @@ model Document {
 model Question {
   id             String       @id @default(cuid())
   documentId     String
-  document       Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
   questionNumber Int
   questionText   String
   choices        String
@@ -53,51 +50,50 @@ model Question {
   explanation    String?
   orderIndex     Int
   createdAt      DateTime     @default(now())
+  document       Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
   quizAnswers    QuizAnswer[]
 }
 
 model QuizSession {
-  id              String         @id @default(cuid())
-  documentId      String?
-  document        Document?      @relation(fields: [documentId], references: [id])
-  questionnaireId String?
-  questionnaire   Questionnaire? @relation(fields: [questionnaireId], references: [id])
-  userId          String?
-  user            User?          @relation(fields: [userId], references: [id])
-
-  status String @default("in_progress")
-
-  shuffleQuestions Boolean      @default(false)
-  shuffleAnswers   Boolean      @default(true)
-  startedAt        DateTime     @default(now())
+  id               String         @id @default(cuid())
+  documentId       String?
+  questionnaireId  String?
+  userId           String?
+  status           String         @default("in_progress")
+  shuffleQuestions Boolean        @default(false)
+  shuffleAnswers   Boolean        @default(true)
+  startedAt        DateTime       @default(now())
   completedAt      DateTime?
   answers          QuizAnswer[]
   result           QuizResult?
+  document         Document?      @relation(fields: [documentId], references: [id])
+  questionnaire    Questionnaire? @relation(fields: [questionnaireId], references: [id])
+  user             User?          @relation(fields: [userId], references: [id])
 }
 
 model QuizAnswer {
   id             String      @id @default(cuid())
   sessionId      String
-  session        QuizSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   questionId     String
-  question       Question    @relation(fields: [questionId], references: [id])
   selectedAnswer String?
   isCorrect      Boolean?
   answeredAt     DateTime    @default(now())
+  question       Question    @relation(fields: [questionId], references: [id])
+  session        QuizSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
 model QuizResult {
   id             String      @id @default(cuid())
   sessionId      String      @unique
-  session        QuizSession @relation(fields: [sessionId], references: [id])
   userId         String?
-  user           User?       @relation(fields: [userId], references: [id])
   documentId     String
   totalQuestions Int
   correctAnswers Int
   score          Float
   timeTaken      Int
   completedAt    DateTime    @default(now())
+  session        QuizSession @relation(fields: [sessionId], references: [id])
+  user           User?       @relation(fields: [userId], references: [id])
 }
 
 model Questionnaire {
@@ -114,13 +110,11 @@ model Questionnaire {
 model QuestionnaireQuestion {
   id              String        @id @default(cuid())
   questionnaireId String
-  questionnaire   Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
   questionNumber  Int
   questionText    String
-  choices         String // JSON string of choices
+  choices         String
   correctAnswer   String
   explanation     String?
   createdAt       DateTime      @default(now())
+  questionnaire   Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
 }
-
-
