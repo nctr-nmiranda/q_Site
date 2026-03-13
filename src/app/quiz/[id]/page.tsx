@@ -60,7 +60,8 @@ export default function QuizPage() {
           documentTitle: session.documentTitle,
           totalQuestions: session.totalQuestions,
           questionsPerPage: session.questionsPerPage,
-          questions: [] // Questions will be loaded lazily
+          questions: [], // Questions will be loaded lazily
+          correctAnswers: session.correctAnswers
         })
 
       } catch (err) {
@@ -107,7 +108,7 @@ export default function QuizPage() {
 
   const quizState = useQuiz({
     sessionId: quizData?.sessionId || '',
-    initialData: quizData || { sessionId: '', documentTitle: '', totalQuestions: 0, questionsPerPage: 10, questions: [] },
+    initialData: quizData || { sessionId: '', documentTitle: '', totalQuestions: 0, questionsPerPage: 10, questions: [], correctAnswers: {} },
     onSubmitBatch: handleSubmitBatch,
     onSubmitQuiz: handleSubmitQuiz
   })

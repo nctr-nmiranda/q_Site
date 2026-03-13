@@ -25,6 +25,7 @@ export interface QuizData {
   totalQuestions: number
   questionsPerPage: number
   questions: Question[]
+  correctAnswers: Record<string, string>
 }
 
 const QUESTIONS_PER_PAGE_OPTIONS = [10, 15, 20]
@@ -156,12 +157,15 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
   }, [answers])
 
   const selectAnswer = useCallback((questionId: string, selectedAnswer: string) => {
+    const correctAnswer = initialData.correctAnswers[questionId]
+    const isCorrect = selectedAnswer === correctAnswer
+
     setAnswers(prev => {
       const updated = {
         ...prev,
         [questionId]: {
-          isCorrect: false,
-          correctAnswer: '',
+          isCorrect,
+          correctAnswer,
           submitted: true,
           selectedAnswer,
           pending: true
@@ -171,18 +175,34 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
       setHasUnsavedChanges(true)
       return updated
     })
-  }, [currentPage, saveToStorage])
+  }, [currentPage, saveToStorage, initialData.correctAnswers])
 
   const summaryData = useMemo(() => {
-    const answered = Object.values(answers).filter(a => a.submitted).length
-    const pending = Object.values(answers).filter(a => a.pending).length
-    const total = answered + pending
-    const correct = Object.values(answers).filter(a => a.submitted && !a.pending && a.isCorrect).length
-    const incorrect = Object.values(answers).filter(a => a.submitted && !a.pending && !a.isCorrect).length
+    const answered = Object.values(answers).length
+    const total = initialData.totalQuestions
+    const correct = Object.entries(answers).filter(([qid, a]) => a.selectedAnswer === initialData.correctAnswers[qid]).length
     const score = answered > 0 ? Math.round((correct / answered) * 100) : 0
 
-    return { total, answered, pending, correct, incorrect, score }
-  }, [answers])
+    return {
+      total,
+      answered,
+      correct,
+      incorrect: answered - correct,
+      score,
+      pending: 0
+    }
+  }, [answers, initialData.totalQuestions, initialData.correctAnswers])
+
+  const questionStatus = useMemo(() => {
+    return Object.keys(initialData.correctAnswers).map(qid => {
+      const answer = answers[qid]
+      return {
+        qid,
+        answered: !!answer,
+        correct: answer ? answer.selectedAnswer === initialData.correctAnswers[qid] : null
+      }
+    })
+  }, [answers, initialData.correctAnswers])
 
   const showAnswerResults = useCallback(async () => {
     setShowAnswersLoading(true)
@@ -304,6 +324,7 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
     changeQuestionsPerPage,
     submitQuiz,
     retakeQuiz,
-    closeSummaryModal
+    closeSummaryModal,
+    questionStatus
   }
 }

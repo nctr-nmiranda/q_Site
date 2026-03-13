@@ -35,7 +35,7 @@ export async function GET(
     }
 
     const answeredQuestions = Object.values(session.answers).filter(a => a.selectedAnswer !== null)
-    const correctAnswers = Object.values(session.answers).filter(a => a.isCorrect === true)
+    const answeredCorrectly = Object.values(session.answers).filter(a => a.isCorrect === true)
     const totalQuestions = metadata.totalQuestions
 
     const startTime = new Date(metadata.startedAt).getTime()
@@ -50,13 +50,14 @@ export async function GET(
       totalQuestions,
       questionsPerPage: metadata.questionsPerPage,
       answeredQuestions: answeredQuestions.length,
-      correctAnswers: correctAnswers.length,
-      score: totalQuestions > 0 ? Math.round((correctAnswers.length / totalQuestions) * 100) : null,
+      correctAnswersCount: answeredCorrectly.length,
+      score: totalQuestions > 0 ? Math.round((answeredCorrectly.length / totalQuestions) * 100) : null,
       timeTaken,
       startedAt: metadata.startedAt,
       completedAt: metadata.completedAt,
       timerEnabled: metadata.timerEnabled,
-      timerMinutes: metadata.timerMinutes
+      timerMinutes: metadata.timerMinutes,
+      correctAnswers: metadata.correctAnswers
     }
 
     if (includeQuestions) {

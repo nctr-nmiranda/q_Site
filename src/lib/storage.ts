@@ -30,6 +30,7 @@ export interface QuizMetadata {
   timerMinutes: number | null
   startedAt: string
   completedAt: string | null
+  correctAnswers: Record<string, string>
 }
 
 export interface Document {
@@ -273,7 +274,37 @@ export const storage = {
       timerMinutes: null,
       startedAt: session.startedAt.toISOString(),
       completedAt: session.completedAt ? session.completedAt.toISOString() : null,
+      correctAnswers: await this.getCorrectAnswersMap(id)
     }
+  },
+
+  async getCorrectAnswersMap(sessionId: string): Promise<Record<string, string>> {
+    const session = await (prisma.quizSession as any).findUnique({
+      where: { id: sessionId },
+      select: { documentId: true, questionnaireId: true }
+    })
+
+    if (!session) return {}
+
+    let questions: { id: string, correctAnswer: string }[] = []
+
+    if (session.documentId) {
+      questions = await prisma.question.findMany({
+        where: { documentId: session.documentId },
+        select: { id: true, correctAnswer: true }
+      })
+    } else if (session.questionnaireId) {
+      questions = await (prisma as any).questionnaireQuestion.findMany({
+        where: { questionnaireId: session.questionnaireId },
+        select: { id: true, correctAnswer: true }
+      })
+    }
+
+    const map: Record<string, string> = {}
+    questions.forEach(q => {
+      map[q.id] = q.correctAnswer
+    })
+    return map
   },
 
   async getQuestionsPaginated(sessionId: string, page: number, limit: number): Promise<Question[]> {
