@@ -43,6 +43,8 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
   const [answers, setAnswers] = useState<Record<string, Answer>>({})
   const [currentPage, setCurrentPage] = useState(1)
   const [questionsPerPage, setQuestionsPerPage] = useState(initialData.questionsPerPage || 10)
+  const [questionsCache, setQuestionsCache] = useState<Record<number, Question[]>>({})
+  const [isLoadingPage, setIsLoadingPage] = useState(false)
   const [showAnswers, setShowAnswers] = useState(false)
   const [showExplanations, setShowExplanations] = useState(false)
   const [showAnswersLoading, setShowAnswersLoading] = useState(false)
@@ -51,20 +53,55 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
   const totalPages = Math.ceil(initialData.totalQuestions / questionsPerPage)
-
   const storageKey = `${STORAGE_KEY_PREFIX}${sessionId}`
+
+  // Fetch questions for a specific page
+  const fetchPage = useCallback(async (page: number) => {
+    if (questionsCache[page]) return questionsCache[page]
+
+    try {
+      const res = await fetch(`/api/quiz/${sessionId}/questions?page=${page}&limit=${questionsPerPage}`)
+      const data = await res.json()
+      if (data.success) {
+        setQuestionsCache(prev => ({ ...prev, [page]: data.data }))
+        return data.data
+      }
+    } catch (err) {
+      console.error(`Failed to fetch page ${page}:`, err)
+    }
+    return []
+  }, [sessionId, questionsPerPage, questionsCache])
+
+  // Load current page questions
+  useEffect(() => {
+    const loadCurrentPage = async () => {
+      if (!questionsCache[currentPage]) {
+        setIsLoadingPage(true)
+        await fetchPage(currentPage)
+        setIsLoadingPage(false)
+      }
+    }
+    loadCurrentPage()
+  }, [currentPage, fetchPage, questionsCache])
+
+  // Background prefetch the next page
+  useEffect(() => {
+    if (currentPage < totalPages && !questionsCache[currentPage + 1]) {
+      // Small delay to prioritize current page rendering
+      const timer = setTimeout(() => {
+        fetchPage(currentPage + 1)
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [currentPage, totalPages, fetchPage, questionsCache])
 
   useEffect(() => {
     const stored = localStorage.getItem(storageKey)
     if (stored) {
       try {
         const parsed = JSON.parse(stored)
-        if (parsed.answers) {
-          setAnswers(parsed.answers)
-        }
-        if (parsed.currentPage) {
-          setCurrentPage(parsed.currentPage)
-        }
+        if (parsed.answers) setAnswers(parsed.answers)
+        if (parsed.currentPage) setCurrentPage(parsed.currentPage)
       } catch (e) {
         console.error('Failed to parse stored answers:', e)
       }
@@ -76,9 +113,7 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
     if (stored) {
       try {
         const parsed = JSON.parse(stored)
-        if (parsed.questionsPerPage) {
-          setQuestionsPerPage(parsed.questionsPerPage)
-        }
+        if (parsed.questionsPerPage) setQuestionsPerPage(parsed.questionsPerPage)
       } catch (e) {
         console.error('Failed to parse settings:', e)
       }
@@ -93,28 +128,8 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
         return ''
       }
     }
-
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [hasUnsavedChanges])
-
-  useEffect(() => {
-    const popStateHandler = (e: PopStateEvent) => {
-      if (hasUnsavedChanges) {
-        const confirmLeave = window.confirm(
-          'You have unsaved answers. Are you sure you want to leave?'
-        )
-        if (!confirmLeave) {
-          e.preventDefault()
-          window.history.pushState(null, '', window.location.href)
-        } else {
-          setHasUnsavedChanges(false)
-        }
-      }
-    }
-
-    window.addEventListener('popstate', popStateHandler)
-    return () => window.removeEventListener('popstate', popStateHandler)
   }, [hasUnsavedChanges])
 
   const saveToStorage = useCallback((newAnswers: Record<string, Answer>, page: number) => {
@@ -124,11 +139,7 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
     }))
   }, [storageKey])
 
-  const currentQuestions = useMemo(() => {
-    const start = (currentPage - 1) * questionsPerPage
-    const end = start + questionsPerPage
-    return initialData.questions.slice(start, end)
-  }, [currentPage, questionsPerPage, initialData.questions])
+  const currentQuestions = questionsCache[currentPage] || []
 
   const answeredCount = useMemo(() => {
     return Object.values(answers).filter(a => a.submitted || a.pending).length
@@ -169,7 +180,7 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
     const correct = Object.values(answers).filter(a => a.submitted && !a.pending && a.isCorrect).length
     const incorrect = Object.values(answers).filter(a => a.submitted && !a.pending && !a.isCorrect).length
     const score = answered > 0 ? Math.round((correct / answered) * 100) : 0
-    
+
     return { total, answered, pending, correct, incorrect, score }
   }, [answers])
 
@@ -178,7 +189,7 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
     try {
       if (pendingAnswers.length > 0) {
         const result = await onSubmitBatch(pendingAnswers)
-        
+
         setAnswers(prev => {
           const updated = { ...prev }
           result.results.forEach(r => {
@@ -229,6 +240,7 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
 
   const changeQuestionsPerPage = useCallback((value: number) => {
     setQuestionsPerPage(value)
+    setQuestionsCache({}) // Invalidate cache when limit changes
     setCurrentPage(1)
     localStorage.setItem(`quiz_settings_${sessionId}`, JSON.stringify({ questionsPerPage: value }))
   }, [sessionId])
@@ -254,6 +266,7 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
 
   const retakeQuiz = useCallback(() => {
     setAnswers({})
+    setQuestionsCache({})
     setCurrentPage(1)
     setShowAnswers(false)
     setShowExplanations(false)
@@ -281,6 +294,7 @@ export function useQuiz({ sessionId, initialData, onSubmitBatch, onSubmitQuiz }:
     summaryData,
     isSubmitting,
     hasUnsavedChanges,
+    isLoadingPage,
     selectAnswer,
     showAnswerResults,
     toggleExplanations,

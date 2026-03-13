@@ -60,7 +60,7 @@ export default function QuizPage() {
           documentTitle: session.documentTitle,
           totalQuestions: session.totalQuestions,
           questionsPerPage: session.questionsPerPage,
-          questions: session.questions
+          questions: [] // Questions will be loaded lazily
         })
 
       } catch (err) {
@@ -155,6 +155,7 @@ export default function QuizPage() {
     showAnswersLoading,
     summaryData,
     isSubmitting,
+    isLoadingPage,
     selectAnswer,
     showAnswerResults,
     toggleExplanations,
@@ -185,16 +186,24 @@ export default function QuizPage() {
 
       <main className="flex-1 px-4 py-6">
         <div className="max-w-2xl mx-auto space-y-6">
-          {currentQuestions.map((question) => (
-            <QuestionCard
-              key={question.id}
-              question={question}
-              answer={answers[question.id]}
-              showAnswer={showAnswers}
-              showExplanation={showExplanations}
-              onSelectAnswer={(answerId) => selectAnswer(question.id, answerId)}
-            />
-          ))}
+          {isLoadingPage ? (
+            <div className="space-y-6 animate-pulse">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-48 bg-slate-200 rounded-xl" />
+              ))}
+            </div>
+          ) : (
+            currentQuestions.map((question) => (
+              <QuestionCard
+                key={question.id}
+                question={question}
+                answer={answers[question.id]}
+                showAnswer={showAnswers}
+                showExplanation={showExplanations}
+                onSelectAnswer={(answerId) => selectAnswer(question.id, answerId)}
+              />
+            ))
+          )}
         </div>
       </main>
 

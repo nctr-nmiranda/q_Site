@@ -16,6 +16,22 @@ export interface Question {
   explanation: string | null
 }
 
+export interface QuizMetadata {
+  id: string
+  documentId?: string
+  questionnaireId?: string
+  documentTitle: string
+  status: 'in_progress' | 'completed'
+  totalQuestions: number
+  questionsPerPage: number
+  shuffleQuestions: boolean
+  shuffleAnswers: boolean
+  timerEnabled: boolean
+  timerMinutes: number | null
+  startedAt: string
+  completedAt: string | null
+}
+
 export interface Document {
   id: string
   title: string
@@ -229,6 +245,80 @@ export const storage = {
     }
   },
 
+  async getQuizMetadata(id: string): Promise<QuizMetadata | null> {
+    const session = await (prisma.quizSession as any).findUnique({
+      where: { id },
+      include: {
+        document: { select: { title: true, totalQuestions: true } },
+        questionnaire: { select: { name: true, totalQuestions: true } },
+      }
+    })
+
+    if (!session) return null
+
+    const totalQuestions = session.document?.totalQuestions || session.questionnaire?.totalQuestions || 0
+    const title = session.document?.title || session.questionnaire?.name || ''
+
+    return {
+      id: session.id,
+      documentId: session.documentId || undefined,
+      questionnaireId: session.questionnaireId || undefined,
+      documentTitle: title,
+      status: session.status as 'in_progress' | 'completed',
+      totalQuestions,
+      questionsPerPage: 10, // Default or from session if added to schema
+      shuffleQuestions: session.shuffleQuestions,
+      shuffleAnswers: session.shuffleAnswers,
+      timerEnabled: false,
+      timerMinutes: null,
+      startedAt: session.startedAt.toISOString(),
+      completedAt: session.completedAt ? session.completedAt.toISOString() : null,
+    }
+  },
+
+  async getQuestionsPaginated(sessionId: string, page: number, limit: number): Promise<Question[]> {
+    const session = await (prisma.quizSession as any).findUnique({
+      where: { id: sessionId },
+      select: { documentId: true, questionnaireId: true, shuffleQuestions: true, shuffleAnswers: true }
+    })
+
+    if (!session) return []
+
+    let questions: any[] = []
+    const skip = (page - 1) * limit
+
+    if (session.documentId) {
+      questions = await prisma.question.findMany({
+        where: { documentId: session.documentId },
+        orderBy: { orderIndex: 'asc' },
+        skip,
+        take: limit
+      })
+    } else if (session.questionnaireId) {
+      questions = await (prisma as any).questionnaireQuestion.findMany({
+        where: { questionnaireId: session.questionnaireId },
+        orderBy: { questionNumber: 'asc' },
+        skip,
+        take: limit
+      })
+    }
+
+    return questions.map((q: any) => {
+      let choices = JSON.parse(q.choices || '[]') as Choice[]
+      if (session.shuffleAnswers) {
+        choices = this.shuffleArray(choices)
+      }
+      return {
+        id: q.id,
+        questionNumber: q.questionNumber,
+        questionText: q.questionText,
+        choices,
+        correctAnswer: q.correctAnswer,
+        explanation: q.explanation
+      }
+    })
+  },
+
   async getQuizSession(id: string): Promise<QuizSession | null> {
     const session = await (prisma.quizSession as any).findUnique({
       where: { id },
@@ -303,19 +393,26 @@ export const storage = {
     questionId: string,
     selectedAnswer: string
   ): Promise<{ isCorrect: boolean; correctAnswer: string } | null> {
-    const session = await this.getQuizSession(sessionId)
+    const session = await (prisma.quizSession as any).findUnique({
+      where: { id: sessionId },
+      select: { status: true, documentId: true, questionnaireId: true }
+    })
+
     if (!session || session.status === 'completed') {
       return null
     }
 
-    const question = session.questions.find(q => q.id === questionId)
-    if (!question) {
-      return null
+    let question: any = null
+    if (session.documentId) {
+      question = await prisma.question.findUnique({ where: { id: questionId } })
+    } else if (session.questionnaireId) {
+      question = await (prisma as any).questionnaireQuestion.findUnique({ where: { id: questionId } })
     }
+
+    if (!question) return null
 
     const isCorrect = selectedAnswer === question.correctAnswer
 
-    // Use findFirst and update/create since we don't have a reliable composite key in schema
     const existing = await prisma.quizAnswer.findFirst({
       where: { sessionId, questionId }
     })
@@ -334,7 +431,13 @@ export const storage = {
     return { isCorrect, correctAnswer: question.correctAnswer }
   },
 
-  async completeQuizSession(id: string): Promise<QuizSession | null> {
+  async countCorrectAnswers(sessionId: string): Promise<number> {
+    return await prisma.quizAnswer.count({
+      where: { sessionId, isCorrect: true }
+    })
+  },
+
+  async completeQuizSession(id: string) {
     await prisma.quizSession.update({
       where: { id },
       data: {
@@ -343,7 +446,7 @@ export const storage = {
       }
     })
 
-    return this.getQuizSession(id)
+    return this.getQuizMetadata(id)
   },
 
   shuffleArray<T>(array: T[]): T[] {
